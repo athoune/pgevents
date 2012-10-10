@@ -24,10 +24,10 @@ def dispatcher(conn, cb):
                     lastseen = record[0]
                     cb(0, record)
 
+if __name__ == '__main__':
+    def _notify(ts, payload):
+        print payload
 
-def _notify(ts, payload):
-    print payload
-
-DSN = "dbname=pubsub"
-conn = psycopg2.connect(DSN)
-dispatcher(conn, _notify)
+    DSN = "dbname=pubsub"
+    conn = psycopg2.connect(DSN)
+    dispatcher(conn, _notify)
