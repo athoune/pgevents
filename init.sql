@@ -4,39 +4,24 @@ CREATE TABLE events (
     payload varchar,
     ts timestamp);
 
-CREATE TYPE event AS (
-    payload varchar,
-    ts timestamp
-);
-
-CREATE TYPE my_events AS (
-    events event[],
-    last timestamp
-);
-
 CREATE OR REPLACE FUNCTION trigger_event(channel varchar, payload varchar) RETURNS timestamp AS $$
 DECLARE
     ts timestamp;
 BEGIN
+    ts = 'now';
     INSERT INTO events (channel, payload, ts) VALUES (channel, payload, ts);
-    NOTIFY channel;
+    EXECUTE 'NOTIFY ' || channel;
+    -- FIXME cleanup old events
     RETURN ts;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION on_event(channel varchar, lastseen timestamp) RETURNS my_events AS $$
+CREATE OR REPLACE FUNCTION on_event(chan varchar, lastseen timestamp) RETURNS TABLE(ts timestamp, payload varchar) AS $$
 DECLARE
-    max timestamp;
-    tas event[];
-    my my_events;
-    e event;
 BEGIN
-    LISTEN channel;
-    FOR e IN SELECT payload, ts FROM events WHERE lastseen > ts ORDER BY ts LOOP
-        tas := tas || ARRAY[e];
-        max := ts;
-    END LOOP;
-    my := (tas, max);
-    RETURN my;
+    RETURN QUERY SELECT events.ts, events.payload
+        FROM events WHERE events.channel=chan AND lastseen < events.ts
+        ORDER BY events.ts;
 END;
 $$ LANGUAGE plpgsql;
+-- FIXME add index on events.channel and events.ts
