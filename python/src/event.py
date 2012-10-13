@@ -10,15 +10,14 @@ class Event(object):
 def serialize(event, writer):
     csize = len(event.channel)
     psize = len(event.payload)
-    tsize = psize + csize
-    writer.write(struct.pack('ii', tsize, csize))
+    writer.write(struct.pack('ii', csize, psize))
     writer.write(event.channel)
     writer.write(event.payload)
 
 
 def unserialize(reader):
-    csize = struct.unpack('i', reader.read(4))[0]
+    csize, psize = struct.unpack('ii', reader.read(8))
     evt = Event()
     evt.channel = reader.read(csize)
-    evt.payload = reader.read()
+    evt.payload = reader.read(psize)
     return evt

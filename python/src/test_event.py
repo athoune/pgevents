@@ -13,6 +13,5 @@ class EventTest(TestCase):
         serialize(evt, buff)
         print buff.read()
         buff.seek(0)
-        buff.read(4)  # total size
         evt2 = unserialize(buff)
         print evt2.channel, evt2.payload
