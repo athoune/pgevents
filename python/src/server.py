@@ -1,6 +1,5 @@
 import select
 import socket
-import time
 
 from pistil.arbiter import Arbiter
 from pistil.worker import Worker
@@ -11,7 +10,7 @@ from pistil.util import parse_address
 import psycopg2
 import psycopg2.extensions
 
-from event import Event, serialize, unserialize
+from event import Event, serialize, unserialize, SocketRW
 
 
 class EventArbiter(TcpArbiter):
@@ -32,8 +31,6 @@ class PgEventListener(Worker):
         self.curs.execute("LISTEN test;")
         self.lastseen = 'epoch'
         address = parse_address(conf['address'])
-        time.sleep(1)
-        print "Try to connect"
         self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.socket.connect(address)
 
@@ -47,28 +44,18 @@ class PgEventListener(Worker):
                 print "Got NOTIFY:", notify.pid, notify.channel, notify.payload
                 self.curs.callproc('on_event', ['test', self.lastseen])
                 for record in self.curs:
+                    print "One event", record
                     self.lastseen = record[0]
                     evt = Event()
                     evt.channel = 'test'
                     evt.payload = record[1]
-                    serialize(evt, SocketWrapper(self.socket))
-
-
-class SocketWrapper(object):
-    def __init__(self, socket):
-        self.socket = socket
-
-    def write(self, stuff):
-        self.socket.sendall(stuff)
-
-    def read(self, size):
-        return self.socket.recv(size)
+                    serialize(evt, SocketRW(self.socket))
 
 
 class EventWorker(TcpSyncWorker):
     def handle(self, sock, addr):
-        evt = unserialize(SocketWrapper(sock))
-        print evt.channel, evt.payload
+        evt = unserialize(SocketRW(sock))
+        print "Event", evt.channel, evt.payload
 
 if __name__ == '__main__':
     conf = {"num_workers": 3, "address": "unix:/tmp/pgevents.sock"}
