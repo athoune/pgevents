@@ -11,7 +11,9 @@ class EventTest(TestCase):
         evt.payload = "{'popo': 42}"
         buff = StringIO()
         serialize(evt, buff)
-        print buff.read()
         buff.seek(0)
         evt2 = unserialize(buff)
         print evt2.channel, evt2.payload
+        self.assertEqual('', buff.read())
+        self.assertEqual(evt.channel, evt2.channel)
+        self.assertEqual(evt.payload, evt2.payload)
