@@ -19,8 +19,7 @@ class EventArbiter(TcpArbiter):
     def on_init(self, conf):
         TcpArbiter.on_init(self, conf)
         # we return a spec
-        print "Ready to listen"
-        return (EventWorker, 30, "worker", {}, "worker",)
+        return (conf['event_worker'], 30, "worker", {}, "worker",)
 
 
 class PgEventListener(Worker):
@@ -49,7 +48,8 @@ class PgEventListener(Worker):
 
     def handle(self):
         if select.select([self.conn], [], [], 5) == ([], [], []):
-            print "Timeout"
+            # Timeout
+            pass
         else:
             self.conn.poll()
             # It's for postgres < 9, without payload, so noftifies are just ONE
@@ -63,9 +63,11 @@ class EventWorker(TcpSyncWorker):
     def handle(self, sock, addr):
         #FIXME implement timeout
         evt = unserialize(SocketRW(sock))
-        print "###### Event", self.pid, evt.channel, evt.payload
-        time.sleep(1)
+        self.do_event(evt)
         close(sock)
+
+    def do_event(self, event):
+        raise NotImplementedError()
 
 if __name__ == '__main__':
     af = "/tmp/pgevents.sock"
@@ -73,7 +75,15 @@ if __name__ == '__main__':
         os.remove(af)
     except Exception:
         pass
-    conf = {"num_workers": 5, "address": "unix:%s" % af}
+
+    class TestWorker(EventWorker):
+        def do_event(self, evt):
+            print "###### Event", self.pid, evt.channel, evt.payload
+            time.sleep(1)
+
+    conf = {"num_workers": 5,
+            "address": "unix:%s" % af,
+            "event_worker": TestWorker}
 
     specs = [
         (EventArbiter, 30, "supervisor", {}, "tcp_pool"),
