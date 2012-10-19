@@ -1,6 +1,7 @@
 import select
 import socket
 import time
+import os
 
 from pistil.arbiter import Arbiter
 from pistil.worker import Worker
@@ -67,7 +68,12 @@ class EventWorker(TcpSyncWorker):
         close(sock)
 
 if __name__ == '__main__':
-    conf = {"num_workers": 5, "address": "unix:/tmp/pgevents.sock"}
+    af = "/tmp/pgevents.sock"
+    try:
+        os.remove(af)
+    except Exception:
+        pass
+    conf = {"num_workers": 5, "address": "unix:%s" % af}
 
     specs = [
         (EventArbiter, 30, "supervisor", {}, "tcp_pool"),
