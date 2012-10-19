@@ -24,18 +24,18 @@ class EventArbiter(TcpArbiter):
 
 class PgEventListener(Worker):
     def on_init(self, conf):
-        DSN = "dbname=pubsub"
-        self.conn = psycopg2.connect(DSN)
+        self.conn = psycopg2.connect(conf['dsn'])
         self.conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
 
         self.curs = self.conn.cursor()
         self.curs.execute("LISTEN test;")
         self.lastseen = 'epoch'
         self.address = parse_address(conf['address'])
+        self.channel = conf['channel']
         self.fetch_events()  # Fetch old events.
 
     def fetch_events(self):
-        self.curs.callproc('on_event', ['test', self.lastseen])
+        self.curs.callproc('on_event', [self.channel, self.lastseen])
         for record in self.curs:
             self.lastseen = record[0]
             evt = Event()
@@ -83,6 +83,8 @@ if __name__ == '__main__':
 
     conf = {"num_workers": 5,
             "address": "unix:%s" % af,
+            "dsn": "dbname=pubsub",
+            "channel": "test",
             "event_worker": TestWorker}
 
     specs = [
