@@ -1,11 +1,12 @@
 import select
 import socket
+import time
 
 from pistil.arbiter import Arbiter
 from pistil.worker import Worker
 from pistil.tcp.sync_worker import TcpSyncWorker
 from pistil.tcp.arbiter import TcpArbiter
-from pistil.util import parse_address
+from pistil.util import parse_address, close
 
 import psycopg2
 import psycopg2.extensions
@@ -18,7 +19,7 @@ class EventArbiter(TcpArbiter):
         TcpArbiter.on_init(self, conf)
         # we return a spec
         print "Ready to listen"
-        return (EventWorker, 30, "worker", {}, "event_handler",)
+        return (EventWorker, 30, "worker", {}, "worker",)
 
 
 class PgEventListener(Worker):
@@ -30,35 +31,43 @@ class PgEventListener(Worker):
         self.curs = self.conn.cursor()
         self.curs.execute("LISTEN test;")
         self.lastseen = 'epoch'
-        address = parse_address(conf['address'])
-        self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.socket.connect(address)
+        self.address = parse_address(conf['address'])
+        self.fetch_events()  # Fetch old events.
+
+    def fetch_events(self):
+        self.curs.callproc('on_event', ['test', self.lastseen])
+        for record in self.curs:
+            self.lastseen = record[0]
+            evt = Event()
+            evt.channel = 'test'
+            evt.payload = record[1]
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.connect(self.address)
+            serialize(evt, SocketRW(sock))
+            close(sock)
 
     def handle(self):
         if select.select([self.conn], [], [], 5) == ([], [], []):
             print "Timeout"
         else:
             self.conn.poll()
+            # It's for postgres < 9, without payload, so noftifies are just ONE
+            # trigger
+            self.fetch_events()
             while self.conn.notifies:
-                notify = self.conn.notifies.pop()
-                print "Got NOTIFY:", notify.pid, notify.channel, notify.payload
-                self.curs.callproc('on_event', ['test', self.lastseen])
-                for record in self.curs:
-                    print "One event", record
-                    self.lastseen = record[0]
-                    evt = Event()
-                    evt.channel = 'test'
-                    evt.payload = record[1]
-                    serialize(evt, SocketRW(self.socket))
+                self.conn.notifies.pop()
 
 
 class EventWorker(TcpSyncWorker):
     def handle(self, sock, addr):
+        #FIXME implement timeout
         evt = unserialize(SocketRW(sock))
-        print "Event", evt.channel, evt.payload
+        print "###### Event", self.pid, evt.channel, evt.payload
+        time.sleep(1)
+        close(sock)
 
 if __name__ == '__main__':
-    conf = {"num_workers": 3, "address": "unix:/tmp/pgevents.sock"}
+    conf = {"num_workers": 5, "address": "unix:/tmp/pgevents.sock"}
 
     specs = [
         (EventArbiter, 30, "supervisor", {}, "tcp_pool"),
