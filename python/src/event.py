@@ -1,5 +1,4 @@
 import struct
-from http_parser.reader import SocketReader
 
 
 class Event(object):
@@ -18,9 +17,7 @@ def serialize(event, writer):
 
 def unserialize(reader):
     buff = reader.read(8)
-    print "Buff", len(buff), buff
     csize, psize = struct.unpack('ii', buff)
-    print "csize, psize", csize, psize
     evt = Event()
     evt.channel = reader.read(csize)
     evt.payload = reader.read(psize)
